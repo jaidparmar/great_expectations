@@ -69,6 +69,7 @@ stages:
           GE_pytest_pip_opts: '--requirement requirements-dev-util.txt --requirement requirements-dev-test.txt'
           GE_pytest_opts: '--no-sqlalchemy --no-spark'
         strategy:
+          parallel: 5
           matrix:
             Python36-Pandas023:
               python.version: '3.6'
@@ -131,6 +132,7 @@ stages:
           GE_pytest_opts: ''
 
         strategy:
+          parallel: 5
           matrix:
             Python36:
               python.version: '3.6'
@@ -230,6 +232,9 @@ stages:
         variables:
           python.version: '3.8'
 
+        strategy:
+          parallel: 2
+
         steps:
           - task: UsePythonVersion@0
             inputs:
@@ -270,6 +275,9 @@ stages:
 
         variables:
           python.version: '3.8'
+
+        strategy:
+          parallel: 2
 
         steps:
           - task: UsePythonVersion@0
