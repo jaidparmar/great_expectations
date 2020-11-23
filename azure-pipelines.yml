@@ -65,7 +65,7 @@ stages:
     jobs:
       - job: compatibility_matrix
         variables:
-          GE_pytest_pip_opts: '--requirement requirements-dev-test.txt'
+          GE_pytest_pip_opts: '--requirement requirements-dev.txt'
           GE_pytest_opts: '--no-sqlalchemy --no-spark'
         strategy:
           matrix:
@@ -87,7 +87,7 @@ stages:
 
           - task: Cache@2
             inputs:
-              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt'
+              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev.txt'
               restoreKeys: |
                 python | "$(Agent.OS)" | requirements.txt
                 python | "$(Agent.OS)"
@@ -124,7 +124,7 @@ stages:
           postgres: postgres
 
         variables:
-          GE_pytest_pip_opts: '--requirement requirements-dev-test.txt --requirement requirements-dev-spark.txt --requirement requirements-dev-sqlalchemy.txt'
+          GE_pytest_pip_opts: '--requirement requirements-dev.txt --requirement requirements-dev-spark.txt --requirement requirements-dev-sqlalchemy.txt'
           GE_pytest_opts: ''
 
         strategy:
@@ -144,9 +144,9 @@ stages:
 
           - task: Cache@2
             inputs:
-              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt | requirements-dev-sqlalchemy.txt | requirements-dev-spark.txt'
+              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev.txt | requirements-dev-sqlalchemy.txt | requirements-dev-spark.txt'
               restoreKeys: |
-                python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt
+                python | "$(Agent.OS)" | requirements.txt | requirements-dev.txt
                 python | "$(Agent.OS)" | requirements.txt
                 python | "$(Agent.OS)"
                 python
@@ -205,7 +205,7 @@ stages:
             displayName: 'Update pip'
 
           - script: |
-                pip install --requirement requirements.txt --requirement requirements-dev-test.txt
+                pip install --requirement requirements.txt --requirement requirements-dev.txt
                 pip install -e .
             displayName: 'Install dependencies'
 
@@ -252,7 +252,7 @@ stages:
 
           - script: |
               pip install --requirement requirements.txt
-              pip install --requirement requirements-dev-test.txt --requirement requirements-dev-sqlalchemy.txt --requirement requirements-dev-util.txt
+              pip install --requirement requirements-dev.txt --requirement requirements-dev-sqlalchemy.txt
               pip install .
             displayName: 'Install dependencies'
 
@@ -283,7 +283,7 @@ stages:
 
           - script: |
               pip install --requirement requirements.txt
-              pip install --requirement requirements-dev-test.txt --requirement requirements-dev-sqlalchemy.txt --requirement requirements-dev-util.txt
+              pip install --requirement requirements-dev.txt --requirement requirements-dev-sqlalchemy.txt
               pip install .
             displayName: 'Install dependencies'
 
