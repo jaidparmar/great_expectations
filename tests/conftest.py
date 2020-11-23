@@ -245,9 +245,13 @@ def build_test_backends_list_cfe(metafunc):
 def pytest_generate_tests(metafunc):
     test_backends = build_test_backends_list(metafunc)
     if "test_backend" in metafunc.fixturenames:
-        metafunc.parametrize("test_backend", test_backends, scope="module")
+        metafunc.parametrize(
+            "test_backend", test_backends, ids=test_backends, scope="module"
+        )
     if "test_backends" in metafunc.fixturenames:
-        metafunc.parametrize("test_backends", [test_backends], scope="module")
+        metafunc.parametrize(
+            "test_backends", [test_backends], ids=["backed_specific"], scope="module"
+        )
 
 
 def pytest_collection_modifyitems(config, items):
