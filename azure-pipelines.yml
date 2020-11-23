@@ -87,8 +87,9 @@ stages:
 
           - task: Cache@2
             inputs:
-              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev.txt'
+              key: 'python | "$(Agent.OS)" | requirements.txt | $(pandas.constraint) | requirements-dev.txt'
               restoreKeys: |
+                python | "$(Agent.OS)" | requirements.txt | $(pandas.constraint)
                 python | "$(Agent.OS)" | requirements.txt
                 python | "$(Agent.OS)"
                 python
@@ -97,7 +98,8 @@ stages:
 
           - script: |
               python -m pip install --upgrade pip
-              pip install $(pandas.constraint) $(GE_pytest_pip_opts)
+              pip install $(GE_pytest_pip_opts)
+              pip install $(pandas.constraint)
               # Consider fragmenting *all* integration tests into separate folder and run
               pip install -e .
             displayName: 'Install dependencies'
