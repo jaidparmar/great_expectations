@@ -1,9 +1,7 @@
 trigger:
   - develop
   - main
-  - 0.*-develop
-  - feature_dev_wip/partitioners
-  - feature/batch_spec
+  - "*-develop"
 
 resources:
   containers:
@@ -34,6 +32,7 @@ resources:
 variables:
   isMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
   GE_USAGE_STATISTICS_URL: "https://qa.stats.greatexpectations.io/great_expectations/v1/usage_statistics"
+  PIP_CACHE_DIR: $(Pipeline.Workspace)/.pip
 
 stages:
   - stage: lint
@@ -66,49 +65,46 @@ stages:
     jobs:
       - job: compatibility_matrix
         variables:
-          GE_pytest_pip_opts: '--requirement requirements-dev-util.txt --requirement requirements-dev-test.txt'
+          GE_pytest_pip_opts: '--requirement requirements-dev-test.txt'
           GE_pytest_opts: '--no-sqlalchemy --no-spark'
         strategy:
-          parallel: 5
           matrix:
             Python36-Pandas023:
               python.version: '3.6'
-              pandas.version: '0.23.4'
+              pandas.constraint: '"pandas==0.23.4"'
             Python37-Pandas025:
               python.version: '3.7'
-              pandas.version: '0.25.3'
+              pandas.constraint: '"pandas==0.25.3"'
             Python38-PandasLatest:
               python.version: '3.8'
-              pandas.version: 'latest'
+              pandas.constraint: '"pandas>=1"'
 
-        # TODO: refactor steps into a task
         steps:
           - task: UsePythonVersion@0
             inputs:
               versionSpec: '$(python.version)'
             displayName: 'Use Python $(python.version)'
 
-          - bash: python -m pip install --upgrade pip
-            displayName: 'Update pip'
-
-          - bash: pip install  pandas
-            condition: eq(variables['pandas.version'], 'latest')
-            displayName: 'Install pandas latest'
-
-          - bash: pip install  pandas==$(pandas.version)
-            condition: ne(variables['pandas.version'], 'latest')
-            displayName: 'Install pandas - $(pandas.version)'
+          - task: Cache@2
+            inputs:
+              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt'
+              restoreKeys: |
+                python | "$(Agent.OS)" | requirements.txt
+                python | "$(Agent.OS)"
+                python
+              path: $(PIP_CACHE_DIR)
+            displayName: Cache pip packages
 
           - script: |
-              pip install  $(GE_pytest_pip_opts)
-              pip install  --requirement requirements.txt
+              python -m pip install --upgrade pip
+              pip install $(pandas.constraint) $(GE_pytest_pip_opts)
               # Consider fragmenting *all* integration tests into separate folder and run
-              pip install  .
+              pip install -e .
             displayName: 'Install dependencies'
 
           - script: |
-              pip install  pytest pytest-cov pytest-azurepipelines
-              pytest $(GE_pytest_opts) --napoleon-docstrings --junitxml=junit/test-results.xml --cov=. --cov-report=xml --cov-report=html
+              pip install pytest pytest-cov pytest-azurepipelines
+              pytest $(GE_pytest_opts) --napoleon-docstrings --junitxml=junit/test-results.xml --cov=great_expectations --cov-report=xml --cov-report=html
             displayName: 'pytest'
 
           - task: PublishTestResults@2
@@ -128,11 +124,10 @@ stages:
           postgres: postgres
 
         variables:
-          GE_pytest_pip_opts: '--requirement requirements-dev-util.txt --requirement requirements-dev-spark.txt --requirement requirements-dev-sqlalchemy.txt --requirement requirements-dev-test.txt'
+          GE_pytest_pip_opts: '--requirement requirements-dev-test.txt --requirement requirements-dev-spark.txt --requirement requirements-dev-sqlalchemy.txt'
           GE_pytest_opts: ''
 
         strategy:
-          parallel: 5
           matrix:
             Python36:
               python.version: '3.6'
@@ -147,26 +142,28 @@ stages:
               versionSpec: '$(python.version)'
             displayName: 'Use Python $(python.version)'
 
-          - bash: python -m pip install --upgrade pip
+          - task: Cache@2
+            inputs:
+              key: 'python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt | requirements-dev-sqlalchemy.txt | requirements-dev-spark.txt'
+              restoreKeys: |
+                python | "$(Agent.OS)" | requirements.txt | requirements-dev-test.txt
+                python | "$(Agent.OS)" | requirements.txt
+                python | "$(Agent.OS)"
+                python
+              path: $(PIP_CACHE_DIR)
+            displayName: Cache pip packages
+
+          - bash:
             displayName: 'Update pip'
 
           - script: |
               sudo apt-get install -y pandoc
-              pip install pypandoc
             displayName: 'Install pandoc'
 
-          - bash: pip install  pandas
-            condition: eq(variables['pandas.version'], 'latest')
-            displayName: 'Install pandas latest'
-
-          - bash: pip install  pandas==$(pandas.version)
-            condition: ne(variables['pandas.version'], 'latest')
-            displayName: 'Install pandas - $(pandas.version)'
-
           - script: |
-              pip install --requirement requirements.txt
-              pip install $(GE_pytest_pip_opts)
-              pip install  .
+              python -m pip install --upgrade pip
+              pip install pypandoc --requirement requirements.txt $(GE_pytest_pip_opts)
+              pip install  -e .
             displayName: 'Install dependencies'
 
           - script: |
@@ -232,9 +229,6 @@ stages:
         variables:
           python.version: '3.8'
 
-        strategy:
-          parallel: 2
-
         steps:
           - task: UsePythonVersion@0
             inputs:
@@ -275,9 +269,6 @@ stages:
 
         variables:
           python.version: '3.8'
-
-        strategy:
-          parallel: 2
 
         steps:
           - task: UsePythonVersion@0
