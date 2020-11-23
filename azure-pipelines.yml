@@ -205,9 +205,8 @@ stages:
             displayName: 'Update pip'
 
           - script: |
-                pip install --requirement requirements-dev-util.txt --requirement requirements-dev-test.txt
-                pip install --requirement requirements.txt
-                pip install .
+                pip install --requirement requirements.txt --requirement requirements-dev-test.txt
+                pip install -e .
             displayName: 'Install dependencies'
 
           - script: |

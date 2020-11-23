@@ -4,7 +4,6 @@
 # Otherwise (i.e., if/when you are not concerned with running tests), please ignore these comments.
 
 
-black==19.10b0  # lint
 boto3>=1.9  # all_tests
 feather-format>=0.4.1  # all_tests
 flake8==3.8.3  # lint
