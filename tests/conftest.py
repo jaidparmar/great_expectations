@@ -250,7 +250,7 @@ def pytest_generate_tests(metafunc):
         )
     if "test_backends" in metafunc.fixturenames:
         metafunc.parametrize(
-            "test_backends", [test_backends], ids=["backed_specific"], scope="module"
+            "test_backends", [test_backends], ids=["backend_specific"], scope="module"
         )
 
 

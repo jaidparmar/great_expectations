@@ -195,6 +195,7 @@ class SparkDFExecutionEngine(ExecutionEngine):
         elif len(spark_config) > 0:
             try:
                 # We need to stop the old session to reconfigure it
+                logger.info("Stopping existing spark context to reconfigure.")
                 spark = SparkSession.builder.getOrCreate()
                 spark.sparkContext.stop()
                 builder = SparkSession.builder

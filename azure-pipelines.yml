@@ -37,7 +37,7 @@ variables:
 stages:
   - stage: lint
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-20.04'
 
     jobs:
       - job: lint
@@ -58,7 +58,7 @@ stages:
 
   - stage: required
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-20.04'
 
     dependsOn: []
 
@@ -127,16 +127,41 @@ stages:
 
         variables:
           GE_pytest_pip_opts: '--requirement requirements-dev.txt --requirement requirements-dev-spark.txt --requirement requirements-dev-sqlalchemy.txt'
-          GE_pytest_opts: ''
 
         strategy:
           matrix:
-            Python36:
-              python.version: '3.6'
-              pandas.version: 'latest'
-            Python37:
+            Python37-spark-expectations:
               python.version: '3.7'
               pandas.version: 'latest'
+              GE_pytest_opts: '--no-sqlalchemy tests/test_definitions'
+            Python38-spark-expectations:
+              python.version: '3.8'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-sqlalchemy tests/test_definitions'
+            Python37-sqlalchemy-expectations:
+              python.version: '3.7'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-spark tests/test_definitions'
+            Python38-sqlalchemy-expectations:
+              python.version: '3.8'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-spark tests/test_definitions'
+            Python37-spark:
+              python.version: '3.7'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-sqlalchemy --ignore tests/test_definitions'
+            Python38-spark:
+              python.version: '3.8'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-sqlalchemy --ignore tests/test_definitions'
+            Python37-sqlalchemy:
+              python.version: '3.7'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-spark --ignore tests/test_definitions'
+            Python38-sqlalchemy:
+              python.version: '3.8'
+              pandas.version: 'latest'
+              GE_pytest_opts: '--no-spark --ignore tests/test_definitions'
 
         steps:
           - task: UsePythonVersion@0
@@ -218,7 +243,7 @@ stages:
 
   - stage: db_integration
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-20.04'
 
     dependsOn: []
 
@@ -298,7 +323,7 @@ stages:
     condition: and(succeeded(), eq(variables.isMain, true))
 
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-20.04'
 
     dependsOn: [required, lint, db_integration, usage_stats_integration]
 
