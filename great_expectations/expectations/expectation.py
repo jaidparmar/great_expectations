@@ -1,6 +1,6 @@
 import logging
 import re
-from abc import ABC, ABCMeta
+from abc import ABC, ABCMeta, abstractmethod
 from collections import Counter
 from copy import deepcopy
 from inspect import isabstract
@@ -51,7 +51,11 @@ def camel_to_snake(name):
 
 
 class MetaExpectation(ABCMeta):
-    """MetaExpectation registers Expectations as they are defined."""
+    """MetaExpectation registers Expectations as they are defined, adding them to the Expectation registry.
+
+    Any class inheriting from Expectation will be registered based on the value of the "expectation_type" class
+    attribute, or, if that is not set, by snake-casing the name of the class.
+    """
 
     def __new__(cls, clsname, bases, attrs):
         newclass = super().__new__(cls, clsname, bases, attrs)
@@ -71,7 +75,38 @@ class MetaExpectation(ABCMeta):
 
 
 class Expectation(ABC, metaclass=MetaExpectation):
-    """Base class for all Expectations."""
+    """Base class for all Expectations.
+
+    Expectation classes *must* have the following attributes set:
+        1. `domain_keys`: a tuple of the *keys* used to determine the domain of the
+           expectation
+        2. `success_keys`: a tuple of the *keys* used to determine the success of
+           the expectation.
+
+    In some cases, subclasses of Expectation (such as TableExpectation) can
+    inherit these properties from their parent class.
+
+    They *may* optionally override `runtime_keys` and `default_kwarg_values`, and
+    may optionally set an explicit value for expectation_type.
+        1. runtime_keys lists the keys that can be used to control output but will
+           not affect the actual success value of the expectation (such as result_format).
+        2. default_kwarg_values is a dictionary that will be used to fill unspecified
+           kwargs from the Expectation Configuration.
+
+    Expectation classes *must* implement the following:
+        1. `_validate`
+        2. `get_validation_dependencies`
+
+    In some cases, subclasses of Expectation, such as ColumnMapExpectation will already
+    have correct implementations that may simply be inherited.
+
+    Additionally, they *may* provide implementations of:
+        1. `validate_configuration`, which should raise an error if the configuration
+           will not be usable for the Expectation
+        2. Data Docs rendering methods decorated with the @renderer decorator. See the
+
+
+    """
 
     version = ge_version
     domain_keys = tuple()
@@ -87,7 +122,6 @@ class Expectation(ABC, metaclass=MetaExpectation):
         "result_format": "BASIC",
     }
     legacy_method_parameters = legacy_method_parameters
-    default_kwarg_values = {}
 
     def __init__(self, configuration: Optional[ExpectationConfiguration] = None):
         if configuration is not None:
@@ -105,6 +139,25 @@ class Expectation(ABC, metaclass=MetaExpectation):
             register_renderer(
                 object_name=expectation_type, parent_class=cls, renderer_fn=attr_obj
             )
+
+    @abstractmethod
+    def get_validation_dependencies(
+        self,
+        configuration: Optional[ExpectationConfiguration] = None,
+        execution_engine: Optional[ExecutionEngine] = None,
+        runtime_configuration: Optional[dict] = None,
+    ):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _validate(
+        self,
+        configuration: ExpectationConfiguration,
+        metrics: Dict,
+        runtime_configuration: dict = None,
+        execution_engine: ExecutionEngine = None,
+    ):
+        raise NotImplementedError
 
     @classmethod
     @renderer(renderer_type="renderer.prescriptive")
@@ -632,22 +685,6 @@ class Expectation(ABC, metaclass=MetaExpectation):
             del all_args["meta"]
         else:
             meta = None
-
-        # all_args = recursively_convert_to_json_serializable(all_args)
-        #
-        # # Patch in PARAMETER args, and remove locally-supplied arguments
-        # # This will become the stored config
-        # expectation_args = copy.deepcopy(all_args)
-        #
-        # if self._expectation_suite.evaluation_parameters:
-        #     evaluation_args = build_evaluation_parameters(
-        #         expectation_args,
-        #         self._expectation_suite.evaluation_parameters,
-        #         self._config.get("interactive_evaluation", True)
-        #     )
-        # else:
-        #     evaluation_args = build_evaluation_parameters(
-        #         expectation_args, None, self._config.get("interactive_evaluation", True))
 
         # Construct the expectation_config object
         return ExpectationConfiguration(

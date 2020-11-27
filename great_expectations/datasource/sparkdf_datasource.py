@@ -10,7 +10,7 @@ from ..core.batch import Batch, BatchMarkers
 from ..dataset import SparkDFDataset
 from ..exceptions import BatchKwargsError
 from ..types.configurations import classConfigSchema
-from .datasource import Datasource
+from .datasource import LegacyDatasource
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ except ImportError:
     )
 
 
-class SparkDFDatasource(Datasource):
+class SparkDFDatasource(LegacyDatasource):
     """The SparkDFDatasource produces SparkDFDatasets and supports generators capable of interacting with local
     filesystem (the default subdir_reader batch kwargs  generator) and databricks notebooks.
 
