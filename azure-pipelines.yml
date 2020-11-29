@@ -132,36 +132,10 @@ stages:
           matrix:
             Python37-spark-expectations:
               python.version: '3.7'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-sqlalchemy tests/test_definitions'
+              GE_pytest_opts: ''
             Python38-spark-expectations:
               python.version: '3.8'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-sqlalchemy tests/test_definitions'
-            Python37-sqlalchemy-expectations:
-              python.version: '3.7'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-spark tests/test_definitions'
-            Python38-sqlalchemy-expectations:
-              python.version: '3.8'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-spark tests/test_definitions'
-            Python37-spark:
-              python.version: '3.7'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-sqlalchemy --ignore tests/test_definitions'
-            Python38-spark:
-              python.version: '3.8'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-sqlalchemy --ignore tests/test_definitions'
-            Python37-sqlalchemy:
-              python.version: '3.7'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-spark --ignore tests/test_definitions'
-            Python38-sqlalchemy:
-              python.version: '3.8'
-              pandas.version: 'latest'
-              GE_pytest_opts: '--no-spark --ignore tests/test_definitions'
+              GE_pytest_opts: ''
 
         steps:
           - task: UsePythonVersion@0
