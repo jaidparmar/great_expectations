@@ -71,8 +71,7 @@ except ImportError:
 
 class SparkDFExecutionEngine(ExecutionEngine):
     """
-    Note that setting spark_config will cause the previous spark context to be stopped and a new context created with
-    the new config.
+This class holds an attribute `spark_df` which is a spark.sql.DataFrame.
 
 --ge-feature-maturity-info--
 
@@ -150,64 +149,25 @@ class SparkDFExecutionEngine(ExecutionEngine):
         "reader_options",
     }
 
-    def __init__(
-        self,
-        name=None,
-        caching=True,
-        batch_spec_defaults=None,
-        batch_data_dict=None,
-        validator=None,
-        persist=True,
-        spark_config=None,
-        spark=None,
-    ):
+    def __init__(self, *args, **kwargs):
         # Creation of the Spark DataFrame is done outside this class
-        self._persist = persist
-        if spark_config is None:
-            spark_config = dict()
-        self._spark_config = spark_config
-        if len(spark_config) > 0 and spark is not None:
-            raise ValueError(
-                "Please provide either spark_config or spark, but not both."
+        self._persist = kwargs.pop("persist", True)
+        self._spark_config = kwargs.pop("spark_config", {})
+        try:
+            builder = SparkSession.builder
+            app_name: Optional[str] = self._spark_config.pop("spark.app.name", None)
+            if app_name:
+                builder.appName(app_name)
+            for k, v in self._spark_config.items():
+                builder.config(k, v)
+            self.spark = builder.getOrCreate()
+        except AttributeError:
+            logger.error(
+                "Unable to load spark context; install optional spark dependency for support."
             )
-        elif len(spark_config) > 0:
-            try:
-                # We need to stop the old session to reconfigure it
-                logger.info("Stopping existing spark context to reconfigure.")
-                spark = SparkSession.builder.getOrCreate()
-                spark.sparkContext.stop()
-                builder = SparkSession.builder
-                app_name: Optional[str] = spark_config.get("spark.app.name")
-                if app_name:
-                    builder.appName(app_name)
-                for k, v in spark_config.items():
-                    if k != "spark.app.name":
-                        builder.config(k, v)
-                self.spark = builder.getOrCreate()
-            except AttributeError:
-                logger.error(
-                    "Unable to load spark context; install optional spark dependency for support."
-                )
-                self.spark = None
-        elif spark is not None:
-            self.spark = spark
-        else:
-            try:
-                # We need to stop the old session to reconfigure it
-                self.spark = SparkSession.builder.getOrCreate()
-            except AttributeError:
-                logger.error(
-                    "Unable to load spark context; install optional spark dependency for support."
-                )
-                self.spark = None
+            self.spark = None
 
-        super().__init__(
-            name=name,
-            caching=caching,
-            batch_spec_defaults=batch_spec_defaults,
-            batch_data_dict=batch_data_dict,
-            validator=validator,
-        )
+        super().__init__(*args, **kwargs)
 
     @property
     def dataframe(self):

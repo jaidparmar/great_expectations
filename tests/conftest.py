@@ -2157,8 +2157,6 @@ def sqlalchemy_dataset(test_backends):
 @pytest.fixture
 def sqlitedb_engine(test_backend):
     if test_backend == "sqlite":
-        import sqlalchemy as sa
-
         try:
             import sqlalchemy as sa
 
