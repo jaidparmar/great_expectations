@@ -1,22 +1,22 @@
 import logging
 import os
 import traceback
-from typing import Any, Callable, List, Optional, Union
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
-import great_expectations.exceptions as ge_exceptions
-from great_expectations.core import ExpectationSuite
-from great_expectations.core.batch import Batch, BatchRequest, PartitionRequest
-from great_expectations.data_context.data_context import DataContext
+from great_expectations.data_context.data_context import (
+    DataContext,
+    datasourceConfigSchema,
+)
+from great_expectations.data_context.types.base import DatasourceConfig
 from great_expectations.data_context.util import (
     instantiate_class_from_config,
     substitute_all_config_variables,
 )
-from great_expectations.datasource.new_datasource import BaseDatasource, Datasource
-from great_expectations.validator.validator import Validator
 
 logger = logging.getLogger(__name__)
+
 yaml = YAML()
 yaml.indent(mapping=2, sequence=4, offset=2)
 yaml.default_flow_style = False
@@ -24,71 +24,6 @@ yaml.default_flow_style = False
 
 class DataContextV3(DataContext):
     """Class implementing the v3 spec for DataContext configs, plus API changes for the 0.13+ series."""
-
-    # TODO: <Alex>We need to standardize the signatures of methods in all subclasses of BaseDataContext</Alex>
-    # TODO: <Alex>Placing this method here avoids conflict with those in DataContext, handling LegacyDatasource</Alex>
-    def add_datasource(self, datasource_name, datasource_config):
-        logger.debug(
-            "Starting DataContext.add_datasource for datasource %s" % datasource_name
-        )
-
-        new_datasource = self._build_and_add_datasource(
-            datasource_name, datasource_config
-        )
-        self._save_project_config()
-
-        return new_datasource
-
-    # TODO: <Alex>Placing this method here avoids conflict with those in DataContext, handling LegacyDatasource</Alex>
-    def _build_and_add_datasource(self, datasource_name, datasource_config):
-        """Add a new Store to the DataContext and (for convenience) return the instantiated Store object.
-
-        Args:
-            datasource_name (str): a key for the new Datasource in in self._datasources
-            datasource_config (dict): a config for the Datasource to add
-
-        Returns:
-            datasource (Datasource)
-        """
-
-        new_datasource = self._build_datasource_from_config(
-            datasource_name, datasource_config,
-        )
-        self._project_config["datasources"][datasource_name] = datasource_config
-        return new_datasource
-
-    # TODO: <Alex>Placing this method here avoids conflict with those in DataContext, handling LegacyDatasource</Alex>
-    def _build_datasource_from_config(self, name: str, config: dict,) -> BaseDatasource:
-        module_name: str = "great_expectations.datasource"
-        runtime_environment: dict = {
-            "name": name,
-            "data_context_root_directory": self.root_directory,
-        }
-        new_datasource: BaseDatasource = instantiate_class_from_config(
-            config=config,
-            runtime_environment=runtime_environment,
-            config_defaults={"module_name": module_name},
-        )
-
-        if not new_datasource:
-            raise ge_exceptions.ClassInstantiationError(
-                module_name=module_name,
-                package_name=None,
-                class_name=config["class_name"],
-            )
-
-        if not isinstance(new_datasource, BaseDatasource):
-            raise TypeError(
-                f"Newly instantiated component {name} is not an instance of BaseDatasource. Please check class_name in the config."
-            )
-
-        self._cached_datasources[name] = new_datasource
-        return new_datasource
-
-    @property
-    def datasources(self):
-        """A single holder for all Datasources in this context"""
-        return self._cached_datasources
 
     def test_yaml_config(
         self,
@@ -142,7 +77,7 @@ class DataContextV3(DataContext):
         if pretty_print:
             print("Attempting to instantiate class from config...")
 
-        if not return_mode in ["instantiated_class", "report_object"]:
+        if return_mode not in ["instantiated_class", "report_object"]:
             raise ValueError(f"Unknown return_mode: {return_mode}.")
 
         substituted_config_variables = substitute_all_config_variables(
@@ -188,9 +123,18 @@ class DataContextV3(DataContext):
                     f"\tInstantiating as a Datasource, since class_name is {class_name}"
                 )
                 datasource_name = name or "my_temp_datasource"
-                instantiated_class = self._build_datasource_from_config(
-                    datasource_name, config,
+                datasource_config: DatasourceConfig = datasourceConfigSchema.load(
+                    CommentedMap(**config)
                 )
+                self._project_config["datasources"][datasource_name] = datasource_config
+                datasource_config = self._project_config_with_variables_substituted.datasources[
+                    datasource_name
+                ]
+                config = dict(datasourceConfigSchema.dump(datasource_config))
+                instantiated_class = self._instantiate_datasource_from_config(
+                    name=datasource_name, config=config
+                )
+                self._cached_datasources[datasource_name] = instantiated_class
 
             else:
                 print(
@@ -217,299 +161,5 @@ class DataContextV3(DataContext):
         except Exception as e:
             if shorten_tracebacks:
                 traceback.print_exc(limit=1)
-
             else:
-                raise (e)
-
-    def get_batch(
-        self,
-        datasource_name: str = None,
-        data_connector_name: str = None,
-        data_asset_name: str = None,
-        *,
-        batch_request: BatchRequest = None,
-        batch_data: Any = None,
-        partition_request: Union[PartitionRequest, dict] = None,
-        partition_identifiers: dict = None,
-        limit: int = None,
-        index=None,
-        custom_filter_function: Callable = None,
-        batch_spec_passthrough: Optional[dict] = None,
-        sampling_method: str = None,
-        sampling_kwargs: dict = None,
-        splitter_method: str = None,
-        splitter_kwargs: dict = None,
-        **kwargs,
-    ) -> Batch:
-        """Get exactly one batch, based on a variety of flexible input types.
-
-        Args:
-            batch_request
-
-            datasource_name
-            data_connector_name
-            data_asset_name
-
-            batch_request
-            batch_data
-            partition_request
-            partition_identifiers
-
-            limit
-            index
-            custom_filter_function
-
-            sampling_method
-            sampling_kwargs
-
-            splitter_method
-            splitter_kwargs
-
-            batch_spec_passthrough
-
-            **kwargs
-
-        Returns:
-            (Batch) The requested batch
-
-        `get_batch` is the main user-facing API for getting batches.
-        In contrast to virtually all other methods in the class, it does not require typed or nested inputs.
-        Instead, this method is intended to help the user pick the right parameters
-
-        This method attempts to return exactly one batch.
-        If 0 or more than 1 batches would be returned, it raises an error.
-        """
-
-        batch_list: List[Batch] = self.get_batch_list(
-            datasource_name=datasource_name,
-            data_connector_name=data_connector_name,
-            data_asset_name=data_asset_name,
-            batch_request=batch_request,
-            batch_data=batch_data,
-            partition_request=partition_request,
-            partition_identifiers=partition_identifiers,
-            limit=limit,
-            index=index,
-            custom_filter_function=custom_filter_function,
-            batch_spec_passthrough=batch_spec_passthrough,
-            sampling_method=sampling_method,
-            sampling_kwargs=sampling_kwargs,
-            splitter_method=splitter_method,
-            splitter_kwargs=splitter_kwargs,
-            **kwargs,
-        )
-        # NOTE: Alex 20201202 - The check below is duplicate of code in Datasource.get_single_batch_from_batch_request()
-        if len(batch_list) != 1:
-            raise ValueError(
-                f"Got {len(batch_list)} batches instead of a single batch."
-            )
-        return batch_list[0]
-
-    def get_batch_list(
-        self,
-        datasource_name: str = None,
-        data_connector_name: str = None,
-        data_asset_name: str = None,
-        *,
-        batch_request: BatchRequest = None,
-        batch_data: Any = None,
-        partition_request: Union[PartitionRequest, dict] = None,
-        partition_identifiers: dict = None,
-        limit: int = None,
-        index=None,
-        custom_filter_function: Callable = None,
-        batch_spec_passthrough: Optional[dict] = None,
-        sampling_method: str = None,
-        sampling_kwargs: dict = None,
-        splitter_method: str = None,
-        splitter_kwargs: dict = None,
-        **kwargs,
-    ) -> List[Batch]:
-        """Get the list of zero or more batches, based on a variety of flexible input types.
-
-        Args:
-            batch_request
-
-            datasource_name
-            data_connector_name
-            data_asset_name
-
-            batch_request
-            batch_data
-            partition_request
-            partition_identifiers
-
-            limit
-            index
-            custom_filter_function
-
-            sampling_method
-            sampling_kwargs
-
-            splitter_method
-            splitter_kwargs
-
-            batch_spec_passthrough
-
-            **kwargs
-
-        Returns:
-            (Batch) The requested batch
-
-        `get_batch` is the main user-facing API for getting batches.
-        In contrast to virtually all other methods in the class, it does not require typed or nested inputs.
-        Instead, this method is intended to help the user pick the right parameters
-
-        This method attempts to return any number of batches, including an empty list.
-        """
-
-        datasource_name: str
-        if batch_request:
-            if not isinstance(batch_request, BatchRequest):
-                raise TypeError(
-                    f"batch_request must be an instance of BatchRequest object, not {type(batch_request)}"
-                )
-            datasource_name = batch_request.datasource_name
-        else:
-            datasource_name = datasource_name
-
-        datasource: Datasource = self.datasources[datasource_name]
-
-        if batch_request:
-            # TODO: Raise a warning if any parameters besides batch_requests are specified
-            return datasource.get_batch_list_from_batch_request(
-                batch_request=batch_request
-            )
-        else:
-            if partition_request is None:
-                if partition_identifiers is None:
-                    partition_identifiers = kwargs
-                else:
-                    # Raise a warning if kwargs exist
-                    pass
-
-                # Currently, the implementation of splitting and sampling is inconsistent between the
-                # Datasource and SimpleSqlalchemyDatasource classes.  The former communicates these
-                # directives to the underlying ExecutionEngine objects via "batch_spec_passthrough", which ultimately
-                # gets merged with "batch_spec" and processed by the configured ExecutionEngine object.  However,
-                # SimpleSqlalchemyDatasource uses "PartitionRequest" to relay the splitting and sampling
-                # directives to the SqlAlchemyExecutionEngine object.  The problem with this is that if the querying
-                # of partitions is implemented using the PartitionQuery class, it will not recognized the keys
-                # representing the splitting and sampling directives and raise an exception.  Additional work is needed
-                # to decouple the directives that go into PartitionQuery from the other PartitionRequest directives.
-                partition_request_params: dict = {
-                    "partition_identifiers": partition_identifiers,
-                    "limit": limit,
-                    "index": index,
-                    "custom_filter_function": custom_filter_function,
-                }
-                if sampling_method is not None:
-                    sampling_params: dict = {
-                        "sampling_method": sampling_method,
-                    }
-                    if sampling_kwargs is not None:
-                        sampling_params["sampling_kwargs"] = sampling_kwargs
-                    partition_request_params.update(sampling_params)
-                if splitter_method is not None:
-                    splitter_params: dict = {
-                        "splitter_method": splitter_method,
-                    }
-                    if splitter_kwargs is not None:
-                        splitter_params["splitter_kwargs"] = splitter_kwargs
-                    partition_request_params.update(splitter_params)
-                partition_request = PartitionRequest(partition_request_params)
-            else:
-                # Raise a warning if partition_identifiers or kwargs exist
-                partition_request = PartitionRequest(partition_request)
-
-            batch_request: BatchRequest = BatchRequest(
-                datasource_name=datasource_name,
-                data_connector_name=data_connector_name,
-                data_asset_name=data_asset_name,
-                batch_data=batch_data,
-                partition_request=partition_request,
-                batch_spec_passthrough=batch_spec_passthrough,
-            )
-            return datasource.get_batch_list_from_batch_request(
-                batch_request=batch_request
-            )
-
-    def get_validator(
-        self,
-        datasource_name: str = None,
-        data_connector_name: str = None,
-        data_asset_name: str = None,
-        *,
-        batch_request: BatchRequest = None,
-        batch_data: Any = None,
-        partition_request: Union[PartitionRequest, dict] = None,
-        partition_identifiers: dict = None,
-        limit: int = None,
-        index=None,
-        custom_filter_function: Callable = None,
-        expectation_suite_name: str = None,
-        expectation_suite: ExpectationSuite = None,
-        create_expectation_suite_with_name: str = None,
-        batch_spec_passthrough: Optional[dict] = None,
-        sampling_method: str = None,
-        sampling_kwargs: dict = None,
-        splitter_method: str = None,
-        splitter_kwargs: dict = None,
-        **kwargs,
-    ) -> Validator:
-        if (
-            sum(
-                bool(x)
-                for x in [
-                    expectation_suite is not None,
-                    expectation_suite_name is not None,
-                    create_expectation_suite_with_name is not None,
-                ]
-            )
-            != 1
-        ):
-            raise ValueError(
-                "Exactly one of expectation_suite_name, expectation_suite, or create_expectation_suite_with_name must be specified"
-            )
-
-        if expectation_suite_name is not None:
-            expectation_suite = self.get_expectation_suite(expectation_suite_name)
-
-        if create_expectation_suite_with_name is not None:
-            expectation_suite = self.create_expectation_suite(
-                expectation_suite_name=create_expectation_suite_with_name
-            )
-
-        batch = self.get_batch(
-            datasource_name=datasource_name,
-            data_connector_name=data_connector_name,
-            data_asset_name=data_asset_name,
-            batch_request=batch_request,
-            batch_data=batch_data,
-            partition_request=partition_request,
-            partition_identifiers=partition_identifiers,
-            limit=limit,
-            index=index,
-            custom_filter_function=custom_filter_function,
-            batch_spec_passthrough=batch_spec_passthrough,
-            sampling_method=sampling_method,
-            sampling_kwargs=sampling_kwargs,
-            splitter_method=splitter_method,
-            splitter_kwargs=splitter_kwargs,
-            **kwargs,
-        )
-
-        batch_definition = batch.batch_definition
-        execution_engine = self.datasources[
-            batch_definition.datasource_name
-        ].execution_engine
-
-        validator = Validator(
-            execution_engine=execution_engine,
-            interactive_evaluation=True,
-            expectation_suite=expectation_suite,
-            data_context=self,
-            batches=[batch],
-        )
-
-        return validator
+                raise e

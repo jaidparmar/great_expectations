@@ -2,7 +2,9 @@ import datetime
 
 import pytest
 
+from great_expectations.data_context import BaseDataContext
 from great_expectations.data_context.types.base import DataContextConfig
+from great_expectations.validator.validator import Validator
 from tests.test_utils import create_files_in_directory
 
 
@@ -176,3 +178,159 @@ data_connectors:
     )
     df_data = df_data[df_data["belongs_in_split"]]
     assert df_data.drop("belongs_in_split", axis=1).shape == (4, 10)
+
+
+def test_relative_data_connector_default_and_relative_asset_base_directory_paths(
+    empty_data_context_v3, test_df, tmp_path_factory
+):
+    context = empty_data_context_v3
+
+    create_files_in_directory(
+        directory=context.root_directory,
+        file_name_list=[
+            "test_dir_0/A/B/C/logfile_0.csv",
+            "test_dir_0/A/B/C/bigfile_1.csv",
+            "test_dir_0/A/filename2.csv",
+            "test_dir_0/A/filename3.csv",
+        ],
+        file_content_fn=lambda: test_df.to_csv(header=True, index=False),
+    )
+
+    yaml_config = f"""
+class_name: Datasource
+
+execution_engine:
+    class_name: PandasExecutionEngine
+
+data_connectors:
+    my_filesystem_data_connector:
+        class_name: ConfiguredAssetFilesystemDataConnector
+        base_directory: test_dir_0/A
+        glob_directive: "*"
+        default_regex:
+            pattern: (.+)\\.csv
+            group_names:
+            - name
+
+        assets:
+            A:
+                base_directory: B/C
+                glob_directive: "log*.csv"
+                pattern: (.+)_(\\d+)\\.csv
+                group_names:
+                - name
+                - number
+"""
+    my_datasource = context.test_yaml_config(
+        name="my_directory_datasource", yaml_config=yaml_config,
+    )
+    assert (
+        my_datasource.data_connectors["my_filesystem_data_connector"].base_directory
+        == f"{context.root_directory}/test_dir_0/A"
+    )
+    assert (
+        my_datasource.data_connectors[
+            "my_filesystem_data_connector"
+        ]._get_full_file_path_for_asset(
+            path="bigfile_1.csv",
+            asset=my_datasource.data_connectors["my_filesystem_data_connector"].assets[
+                "A"
+            ],
+        )
+        == f"{context.root_directory}/test_dir_0/A/B/C/bigfile_1.csv"
+    )
+
+    my_batch = context.get_batch(
+        datasource_name="my_directory_datasource",
+        data_connector_name="my_filesystem_data_connector",
+        data_asset_name="A",
+    )
+
+    df_data = my_batch.data
+    assert df_data.shape == (120, 10)
+
+
+def test__get_data_context_version(empty_data_context_v3, titanic_data_context):
+    context = empty_data_context_v3
+
+    assert not context._get_data_context_version("some_datasource_name", **{})
+    assert not context._get_data_context_version(arg1="some_datasource_name", **{})
+
+    yaml_config = f"""
+class_name: Datasource
+
+execution_engine:
+    class_name: PandasExecutionEngine
+
+data_connectors:
+    general_runtime_data_connector:
+      module_name: great_expectations.datasource.data_connector
+      class_name: RuntimeDataConnector
+      runtime_keys:
+      - run_id
+"""
+    # noinspection PyUnusedLocal
+    my_datasource = context.test_yaml_config(
+        name="some_datasource_name", yaml_config=yaml_config,
+    )
+
+    assert context._get_data_context_version("some_datasource_name", **{}) == "v3"
+    assert context._get_data_context_version(arg1="some_datasource_name", **{}) == "v3"
+
+    context = titanic_data_context
+    root_dir = context.root_directory
+    batch_kwargs = {
+        "datasource": "mydatasource",
+        "path": f"{root_dir}/../data/Titanic.csv",
+    }
+    assert context._get_data_context_version(arg1=batch_kwargs) == "v2"
+    assert context._get_data_context_version(batch_kwargs) == "v2"
+    assert (
+        context._get_data_context_version(
+            "some_value", **{"batch_kwargs": batch_kwargs}
+        )
+        == "v2"
+    )
+
+
+def test_in_memory_data_context_configuration(
+    titanic_pandas_multibatch_data_context_v3,
+):
+    project_config_dict: dict = titanic_pandas_multibatch_data_context_v3.get_config(
+        mode="dict"
+    )
+    project_config_dict["plugins_directory"] = None
+    project_config_dict["validation_operators"] = {
+        "action_list_operator": {
+            "class_name": "ActionListValidationOperator",
+            "action_list": [
+                {
+                    "name": "store_validation_result",
+                    "action": {"class_name": "StoreValidationResultAction"},
+                },
+                {
+                    "name": "store_evaluation_params",
+                    "action": {"class_name": "StoreEvaluationParametersAction"},
+                },
+                {
+                    "name": "update_data_docs",
+                    "action": {"class_name": "UpdateDataDocsAction"},
+                },
+            ],
+        }
+    }
+    project_config: DataContextConfig = DataContextConfig(**project_config_dict)
+    data_context = BaseDataContext(
+        project_config=project_config,
+        context_root_dir=titanic_pandas_multibatch_data_context_v3.root_directory,
+    )
+
+    my_validator: Validator = data_context.get_validator(
+        datasource_name="titanic_multi_batch",
+        data_connector_name="my_data_connector",
+        data_asset_name="Titanic_1912",
+        create_expectation_suite_with_name="my_test_titanic_expectation_suite",
+    )
+
+    assert my_validator.expect_table_row_count_to_equal(1313)["success"]
+    assert my_validator.expect_table_column_count_to_equal(7)["success"]
